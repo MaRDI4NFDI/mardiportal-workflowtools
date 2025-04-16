@@ -1,0 +1,22 @@
+[project]
+name = "mardiportal-workflowtools"
+version = "0.1.0"
+description = "Workflow-related tools for the MaRDI portal"
+authors = [{ name = "Tim Conrad", email = "tim.conrad@mardi4nfdi.de" }]
+readme = "README.md"
+requires-python = ">=3.7"
+dependencies = [
+    "boto3",
+    "lakefs_sdk",
+    "minio",
+    "prefect",
+    "requests",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["mardiportal.workflowtools*"]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
