@@ -8,8 +8,8 @@ from lakefs_sdk import Configuration, models, HealthCheckApi, ObjectsApi, AuthAp
     ApiException
 from typing import List
 from minio import Minio
-from logger_helper import get_logger
 
+from mardiportal.workflowtools.logger_helper import get_logger
 from mardiportal.workflowtools.secrets_helper import read_credentials
 
 
