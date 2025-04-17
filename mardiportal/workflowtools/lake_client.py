@@ -1,18 +1,18 @@
-from typing import Optional, List, Dict, Union
-
 import boto3
 import lakefs_sdk
 import os
+
+from typing import Optional, List, Dict, Union
 from botocore.config import Config
-from lakefs_sdk import Configuration, models, HealthCheckApi, ObjectsApi, AuthApi, CommitsApi, \
+from lakefs_sdk import Configuration, models, HealthCheckApi, ObjectsApi, CommitsApi, \
     ApiException
-from typing import List
 from minio import Minio
 
 from mardiportal.workflowtools.logger_helper import get_logger
 from mardiportal.workflowtools.secrets_helper import read_credentials
 
 
+# noinspection PyTypeChecker
 class LakeClient:
     """Client for interacting with LakeFS using lakefs_sdk and boto3."""
 
@@ -21,9 +21,9 @@ class LakeClient:
         Initialize the LakeFS client.
 
         Args:
-            host (str): LakeFS API host URL.
-            user (str): Username or access key.
-            password (str): Password or secret key.
+            _host (str): LakeFS API host URL.
+            _user (str): Username or access key.
+            _password (str): Password or secret key.
         """
         configuration = Configuration(host=_host + "/api/v1", username=_user, password=_password)
         self.lakefs_api_client = lakefs_sdk.ApiClient(configuration)
@@ -205,18 +205,25 @@ class LakeClient:
         except ApiException as e:
             if e.status == 400 and "commit: no changes" in e.body:
                 print("[commit_to_lakefs] No changes to commit.")
-                return None
+                return ""
             print(f"[commit_to_lakefs] API Error: {e}")
             raise
         except Exception as e:
             print(f"[commit_to_lakefs] Error: {e}")
             raise
 
-    def sync_repo_to_local(self, repo: str, branch: str, repo_subpath: str, local_dir: str, overwrite: bool = False) -> None:
+
+    def sync_repo_to_local(
+            self, repo: str, branch: str, repo_subpath: str,
+            local_dir: str, overwrite: bool = False) -> None:
         """
         Download files from LakeFS to a local path.
 
         Args:
+            repo (str): Repository name.
+            branch (str): Branch name.
+            repo_subpath (str): Subpath within the repository.
+            local_dir (str): Local path.
             overwrite (bool): Overwrite existing local files. Defaults to False.
         """
         downloaded, skipped = 0, 0
