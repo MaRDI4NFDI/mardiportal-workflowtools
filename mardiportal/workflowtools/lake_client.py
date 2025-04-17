@@ -2,12 +2,13 @@ from typing import Optional, List, Dict, Union
 
 import boto3
 import lakefs_sdk
+import os
 from botocore.config import Config
 from lakefs_sdk import Configuration, models, HealthCheckApi, ObjectsApi, AuthApi, CommitsApi, \
     ApiException
 from typing import List
 from minio import Minio
-import os
+from logger_helper import get_logger
 
 from mardiportal.workflowtools.secrets_helper import read_credentials
 
@@ -246,9 +247,52 @@ class LakeClient:
             raise
 
 
+def upload_and_commit_to_lakefs( path_and_file: str,
+                         lakefs_url: str, lakefs_repo: str, lakefs_path:str,
+                         msg: str = "Not commit message",
+                         lakefs_user: str = None, lakefs_pwd: str = None ) -> None:
+    """
+    Uploads a local file to a specified path in a lakeFS repository and commits the upload.
+
+    This function reads lakeFS credentials from a secrets file, initializes a LakeClient,
+    uploads the file to the given lakeFS path, and creates a commit in the 'main' branch.
+
+    Args:
+        path_and_file (str): The local file path (including filename) to upload.
+        lakefs_url (str): The URL of the lakeFS instance.
+        lakefs_repo (str): The name of the lakeFS repository to upload to.
+        lakefs_path (str): The destination path in the lakeFS repository (no file name).
+        lakefs_user (str): Username to use to login.
+        lakefs_pwd (str): Password to use to login.
+
+
+    Returns:
+        None
+
+    Raises:
+        Logs an error and exits early if credentials cannot be read.
+    """
+    logger = get_logger(__name__)
+
+    # Initialize LakeFS client
+    client = LakeClient(lakefs_url, lakefs_user, lakefs_pwd)
+
+    # Upload
+    logger.info(f"Uploading {path_and_file} to lakeFS ({lakefs_repo} -> main -> {lakefs_path})")
+    files_to_upload = [path_and_file]
+    client.upload_to_lakefs(files_to_upload, _repo=lakefs_repo, _branch="main", _lakefs_repo_subpath=lakefs_path)
+
+    # Commit
+    commit_id = client.commit_to_lakefs(repo=lakefs_repo, branch="main", msg=msg, metadata={"source": "mardiKG_paper2code_linker.tasks.upload_db"})
+    if commit_id:
+        logger.info(f"Commited with ID: {commit_id}")
+    else:
+        logger.info(f"Not commited - no change detected in DB.")
+
+
+
 if __name__ == "__main__":
-    # import logging
-    # logging.basicConfig(level=logging.DEBUG)
+    logger = get_logger(__name__)
 
     # --- Setup ---
     secrets_path = "../secrets.conf"
@@ -259,7 +303,7 @@ if __name__ == "__main__":
         raise Exception("No valid credentials found. Please check '%s'", secrets_path)
 
     host_url = "https://lake-bioinfmed.zib.de"
-    username=creds["user"],
+    username=creds["user"]
     password=creds["password"]
 
     client = LakeClient(host_url, username, password)
