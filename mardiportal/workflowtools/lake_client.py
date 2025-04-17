@@ -262,6 +262,7 @@ def upload_and_commit_to_lakefs( path_and_file: str,
         lakefs_url (str): The URL of the lakeFS instance.
         lakefs_repo (str): The name of the lakeFS repository to upload to.
         lakefs_path (str): The destination path in the lakeFS repository (no file name).
+        msg (str): The commit message.
         lakefs_user (str): Username to use to login.
         lakefs_pwd (str): Password to use to login.
 
