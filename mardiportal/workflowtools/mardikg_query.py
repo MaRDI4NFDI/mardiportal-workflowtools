@@ -5,32 +5,137 @@ import shlex
 import json
 import time
 
-
 def query_mardi_kg_for_arxivid(
         arxiv_id: str, max_retries: int = 5, retry_delay: float = 2.0,
-        api_url: str = "https://portal.mardi4nfdi.de/w/api.php") -> List[Dict]:
-    """Query the MaRDI MediaWiki API for pages mentioning a specific arXiv ID.
+        api_url: str = "https://portal.mardi4nfdi.de/w/api.php",
+        namespace="4206") -> List[Dict]:
+    """
+    Query the MaRDI MediaWiki API for pages mentioning a specific arXiv ID.
 
-    This function queries the MaRDI knowledge graph via its MediaWiki API
-    for a custom string pattern based on the arXiv ID (in the "Publication" namespace (4206)).
+    This function queries the MaRDI Knowledge Graph via its MediaWiki API
+    for a pattern based on the arXiv ID (formatted as 'arXiv<ID>MaRDI')
+    in the 'Publication' namespace.
 
     Args:
-      arxiv_id (str): The arXiv identifier (e.g., "2104.06175").
-      max_retries (int, optional): Maximum number of retries before raising an error.
-      retry_delay(float, optional): Delay between retries in seconds.
-      api_url(str): The base URL of the MediaWiki API.
+        arxiv_id (str): The arXiv identifier (e.g., "2104.06175").
+        max_retries (int, optional): Maximum number of retry attempts on failure.
+        retry_delay (float, optional): Delay between retries, in seconds.
+        api_url (str, optional): The MediaWiki API endpoint.
+        namespace (str, optional): The MediaWiki namespace to search in (default is "4206").
 
     Returns:
-        List[Dict]: A list of matching result entries with extracted metadata,
-                    including arXiv ID, title, QID, and snippet context.
+        List[Dict]: A list of search result entries with keys 'qid', 'title', and 'snippet'.
     """
 
-    search_string = f"arXiv{arxiv_id}MaRDI"
+    arxiv_query = f"arXiv{arxiv_id}MaRDI"
+
+    data = query_mardi_kg(
+        query=arxiv_query,
+        max_retries=max_retries,
+        retry_delay=retry_delay,
+        api_url=api_url,
+        namespace=namespace
+    )
+
+    # Extract data from query response
+    results = []
+    for r in data.get("query", {}).get("search", []):
+        snippet = r.get("snippet", "")
+        clean_snippet = snippet.replace("<span class=\"searchmatch\">", "").replace("</span>", "")
+        qid_match = re.search(r"QID(Q\d+)", clean_snippet)
+        qid = qid_match.group(1) if qid_match else None
+
+        results.append({
+            "qid": qid,
+            "title": r.get("title", "(no title)"),
+            "snippet": clean_snippet
+        })
+
+    return results
+
+
+def query_mardi_kg_for_doi(
+        doi: str, max_retries: int = 5, retry_delay: float = 2.0,
+        api_url: str = "https://portal.mardi4nfdi.de/w/api.php",
+        namespace="4206") -> List[Dict]:
+    """
+    Query the MaRDI MediaWiki API for pages mentioning a specific DOI.
+
+    This function queries the MaRDI Knowledge Graph via its MediaWiki API
+    using a quoted DOI string (e.g., '"doi.org/10.1007/s40305-018-0210-x"')
+    in the 'Publication' namespace.
+
+    Args:
+        doi (str): The DOI identifier (e.g., "10.1007/s40305-018-0210-x").
+        max_retries (int, optional): Maximum number of retry attempts on failure.
+        retry_delay (float, optional): Delay between retries, in seconds.
+        api_url (str, optional): The MediaWiki API endpoint.
+        namespace (str, optional): The MediaWiki namespace to search in (default is "4206").
+
+    Returns:
+        List[Dict]: A list of search result entries with keys 'qid', 'title', and 'snippet'.
+    """
+
+    doi_query = f'"doi.org/{doi}"'
+
+    data = query_mardi_kg(
+        query=doi_query,
+        max_retries=max_retries,
+        retry_delay=retry_delay,
+        api_url=api_url,
+        namespace=namespace
+    )
+
+    # Extract data from query response
+    results = []
+    for r in data.get("query", {}).get("search", []):
+        snippet = r.get("snippet", "")
+        clean_snippet = snippet.replace("<span class=\"searchmatch\">", "").replace("</span>", "")
+
+        # Extract QID from the title, which is in the form "Publication:2176828"
+        title = r.get("title", "(no title)")
+        qid_match = re.match(r"Publication:(\d+)", title)
+        qid = f"Q{qid_match.group(1)}" if qid_match else None
+
+        results.append({
+            "qid": qid,
+            "title": title,
+            "snippet": clean_snippet
+        })
+
+    return results
+
+
+
+def query_mardi_kg(
+        query: str, max_retries: int = 5, retry_delay: float = 2.0,
+        api_url: str = "https://portal.mardi4nfdi.de/w/api.php", namespace="4206") -> str:
+    """
+    Perform a raw search query against the MaRDI MediaWiki API.
+
+    This function executes a `list=search` query against the API with retry logic
+    in case of network failures or server errors.
+
+    Args:
+        query (str): The search string to submit.
+        max_retries (int, optional): Maximum number of retry attempts on failure.
+        retry_delay (float, optional): Delay between retries, in seconds.
+        api_url (str, optional): The MediaWiki API endpoint.
+        namespace (str, optional): The MediaWiki namespace to search in.
+
+    Returns:
+        dict: The parsed JSON result of the query, containing the search matches.
+
+    Raises:
+        requests.RequestException: If all retry attempts fail.
+    """
+
+    search_string = query
     params = {
         "action": "query",
         "list": "search",
         "srsearch": search_string,
-        "srnamespace": "4206",
+        "srnamespace": namespace,
         "format": "json"
     }
 
@@ -51,21 +156,7 @@ def query_mardi_kg_for_arxivid(
         print(generate_curl_command(api_url, params))
         raise last_exception
 
-    results = []
-    for r in data.get("query", {}).get("search", []):
-        snippet = r.get("snippet", "")
-        clean_snippet = snippet.replace("<span class=\"searchmatch\">", "").replace("</span>", "")
-        qid_match = re.search(r"QID(Q\d+)", clean_snippet)
-        qid = qid_match.group(1) if qid_match else None
-
-        results.append({
-            "qid": qid,
-            "arxiv_id": arxiv_id,
-            "title": r.get("title", "(no title)"),
-            "snippet": clean_snippet
-        })
-
-    return results
+    return data
 
 
 def generate_curl_command(url, params=None, json_data=False):
@@ -93,3 +184,11 @@ def generate_curl_command(url, params=None, json_data=False):
         curl_cmd = f"curl -X POST {shlex.quote(url)} -d {escaped_data}"
 
     return curl_cmd
+
+
+if __name__ == "__main__":
+    result = query_mardi_kg_for_arxivid("2104.06175")
+    print( result )
+
+    result = query_mardi_kg_for_doi("10.1007/s40305-018-0210-x")
+    print( result )
