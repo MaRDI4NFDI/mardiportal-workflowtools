@@ -1,5 +1,6 @@
 import requests
 import pytest
+from functools import lru_cache
 
 from mardiportal.workflowtools import mardikg_query
 
@@ -15,7 +16,26 @@ class DummyResponse:
         return self._payload
 
 
+@lru_cache
+def _portal_reachable():
+    """Return True if the MaRDI portal API responds within the timeout."""
+    try:
+        requests.get(
+            "https://portal.mardi4nfdi.de/w/api.php",
+            params={"action": "query", "meta": "siteinfo", "format": "json"},
+            timeout=5,
+        )
+        return True
+    except requests.RequestException:
+        return False
+
+
 def test_query_mardi_kg_for_arxivid_parses_results(monkeypatch):
+    """Verify that arXiv ID queries generate the expected search string and parsed results.
+
+    Args:
+        monkeypatch: Pytest fixture replacing the HTTP call with a fake implementation.
+    """
     captured = {}
 
     def fake_query(query, **kwargs):
@@ -46,6 +66,11 @@ def test_query_mardi_kg_for_arxivid_parses_results(monkeypatch):
 
 
 def test_query_mardi_kg_for_doi_parses_results(monkeypatch):
+    """Check that DOI queries use the quoted search string and return normalized results.
+
+    Args:
+        monkeypatch: Pytest fixture replacing the HTTP call with a fake implementation.
+    """
     captured = {}
 
     def fake_query(query, **kwargs):
@@ -76,6 +101,11 @@ def test_query_mardi_kg_for_doi_parses_results(monkeypatch):
 
 
 def test_query_mardi_kg_retries_then_succeeds(monkeypatch):
+    """Ensure the query retries once after a transient failure and ultimately succeeds.
+
+    Args:
+        monkeypatch: Pytest fixture stubbing HTTP calls and time.sleep.
+    """
     call_count = {"value": 0}
 
     def fake_post(url, data):
@@ -94,6 +124,12 @@ def test_query_mardi_kg_retries_then_succeeds(monkeypatch):
 
 
 def test_query_mardi_kg_raises_after_exhausting_retries(monkeypatch, capsys):
+    """Confirm the query raises an error after max retries and prints curl context.
+
+    Args:
+        monkeypatch: Pytest fixture stubbing dependencies.
+        capsys: Pytest fixture capturing stdout for assertions.
+    """
     call_count = {"value": 0}
 
     def fake_post(url, data):
@@ -120,3 +156,34 @@ def test_query_mardi_kg_raises_after_exhausting_retries(monkeypatch, capsys):
     assert "All retries failed." in out
     assert "curlcmd" in out
     assert captured_params["params"]["srsearch"] == "final-query"
+
+
+@pytest.mark.skipif(
+    not _portal_reachable(),
+    reason="requires network access to https://portal.mardi4nfdi.de",
+)
+def test_query_mardi_kg_live_returns_search_payload():
+    """Exercise the live MaRDI endpoint using default parameters and validate structure."""
+    print("Running 'test_query_mardi_kg_live_returns_search_payload()' ...")
+    data = mardikg_query.query_mardi_kg("MaRDI")
+    print(f"Got payload with keys: {list(data.keys())}")
+    print(f"Search matches: {len(data.get('query', {}).get('search', []))}")
+    assert "query" in data
+    assert "search" in data["query"]
+    assert isinstance(data["query"]["search"], list)
+
+
+@pytest.mark.skipif(
+    not _portal_reachable(),
+    reason="requires network access to https://portal.mardi4nfdi.de",
+)
+def test_query_mardi_kg_for_arxivid_live_returns_results():
+    """Hit the live API for a known arXiv identifier and ensure at least one parsed match."""
+    print("Running 'test_query_mardi_kg_for_arxivid_live_returns_results()' ...")
+    results = mardikg_query.query_mardi_kg_for_arxivid("2104.06175")
+    print(f"Retrieved {len(results)} parsed results")
+    assert isinstance(results, list)
+    assert results  # expect at least one hit for this identifier
+    first = results[0]
+    print(f"First result: {first}")
+    assert {"qid", "title", "snippet"} <= first.keys()
