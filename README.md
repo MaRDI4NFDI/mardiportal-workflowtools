@@ -13,6 +13,20 @@ python -m pip install --upgrade pip setuptools
 python -m pip install .
 ```
 
+### Create and activate a virtual environment
+
+```bash
+  python -m venv .venv
+  source .venv/bin/activate  # On Windows use: .venv\\Scripts\\activate
+```
+
+With the environment active, install the package:
+
+```bash
+  python -m pip install --upgrade pip setuptools
+  python -m pip install .
+```
+
 ## Secrets Configuration
 Some tools require credentials (e.g., for authenticated API access). You can provide them in a simple key-value file named secrets.conf:
 ```ini

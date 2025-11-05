@@ -1,0 +1,5 @@
+boto3
+lakefs_sdk
+minio
+prefect
+requests
